@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    background-color: #081017;
+    color: #e6eff4;
+    font-family: var(--font-sans);
+    letter-spacing: 0.005em;
+  }
+}
+
+/* Space Grotesk utility strictly for CinContra title, numeric scores, and R$/h values */
+.font-grotesk {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Memory-optimized solid translucent surfaces (zero backdrop-blur for low RAM/GPU usage) */
+.cin-panel {
+  background-color: rgba(13, 24, 33, 0.94);
+  border: 1px solid rgba(142, 184, 202, 0.34);
+}
+
+.cin-surface {
+  background-color: rgba(9, 18, 26, 0.9);
+  border: 1px solid rgba(127, 166, 184, 0.24);
+}
+
+/* Custom sleek navy scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(8, 16, 23, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(127, 166, 184, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(163, 201, 217, 0.5);
+}
+
+input[type="range"].cin-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: rgba(127, 166, 184, 0.28);
+  border-radius: 2px;
+  outline: none;
+}
+
+input[type="range"].cin-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0d1821;
+  border: 1.5px solid #a3c9d9;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+input[type="range"].cin-range::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  border-color: #e6eff4;
+}
+
+input[type="range"].cin-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #0d1821;
+  border: 1.5px solid #a3c9d9;
+  cursor: pointer;
+}
+
+@keyframes cin-edge-retract {
+  0%,
+  100% {
+    stroke-dashoffset: 0;
+    stroke-opacity: 0.92;
+  }
+  50% {
+    stroke-dashoffset: var(--edge-len);
+    stroke-opacity: 0.22;
+  }
+}
+
+.cin-edge-animated {
+  animation: cin-edge-retract 2.6s ease-in-out infinite;
+}
+
