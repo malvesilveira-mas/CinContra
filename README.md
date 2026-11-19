@@ -56,8 +56,9 @@ CinContra/
 
 ### Camada 2 & 3 — Sub-Índices (`ui_metrics`), Pesos Dinâmicos e Comportamento em Violação
 
-$$\text{Score\_Final}(Q) = W_1 S_{\text{Tecnico}} + W_2 S_{\text{Dominio}} + W_3 S_{\text{Quimica}} + W_4 S_{\text{RPG}} + W_5 S_{\text{Confiabilidade\_Custo}}$$
-
+```math
+\text{Score\_Final}(Q) = W_1 S_{\text{Tecnico}} + W_2 S_{\text{Dominio}} + W_3 S_{\text{Quimica}} + W_4 S_{\text{RPG}} + W_5 S_{\text{Confiabilidade\_Custo}}
+```
 - **Mapeamento na Interface (`Resultados da Combinação`):**
   - `S_Tecnico` $\rightarrow$ **Competência Técnica**
   - `S_Dominio` $\rightarrow$ **Domínio do Setor**
