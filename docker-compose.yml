@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cincontra-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/data/squads.db}
+      - CSV_PATH=/app/squad_rpg_60.csv
+    volumes:
+      - sqlite_data:/app/data
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    networks:
+      - cincontra_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  frontend:
+    build:
+      context: ./cincontra_front
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    container_name: cincontra-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - cincontra_net
+
+volumes:
+  sqlite_data:
+    name: cincontra_sqlite_data
+
+networks:
+  cincontra_net:
+    driver: bridge

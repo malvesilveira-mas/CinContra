@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { Minus, Plus, Users, X } from 'lucide-react';
-import { DOMAIN_LABELS, SKILL_LABELS } from '../data/professionals';
+import {
+  DOMAIN_LABELS,
+  getProfessionalFullTitle,
+  SKILL_LABELS,
+} from '../data/professionals';
 import {
   generateMemberJustification,
   isEligibleForProject,
@@ -43,15 +47,25 @@ export const TalentBankWindow: React.FC<TalentBankWindowProps> = ({
   const eligibleTalentBank = useMemo(() => {
     return allProfessionals
       .filter((p) => !activeIds.has(p.id))
+      .filter(
+        (p) => trackFilter === 'Todos' || p.trilha === trackFilter
+      )
       .map((p) => ({
         professional: p,
         eligibility: isEligibleForProject(p, params),
       }))
-      .filter((item) => item.eligibility.eligible)
-      .filter(
-        (item) =>
-          trackFilter === 'Todos' || item.professional.trilha === trackFilter
-      );
+      .sort((a, b) => {
+        if (b.eligibility.eligible !== a.eligibility.eligible) {
+          return b.eligibility.eligible ? 1 : -1;
+        }
+        if (b.eligibility.matchedReqSkills !== a.eligibility.matchedReqSkills) {
+          return b.eligibility.matchedReqSkills - a.eligibility.matchedReqSkills;
+        }
+        return (
+          parseInt(a.professional.id.replace(/\D/g, ''), 10) -
+          parseInt(b.professional.id.replace(/\D/g, ''), 10)
+        );
+      });
   }, [allProfessionals, activeIds, params, trackFilter]);
 
   return (
@@ -61,7 +75,7 @@ export const TalentBankWindow: React.FC<TalentBankWindowProps> = ({
         <div className="flex items-center gap-2 min-w-0">
           <Users className="w-3.5 h-3.5 text-[#8EB8CA] shrink-0" />
           <h2 className="text-xs font-semibold text-[#E6EFF4] truncate">
-            Banco de Talentos
+            Banco de Talentos ({eligibleTalentBank.length})
           </h2>
         </div>
 
@@ -103,22 +117,23 @@ export const TalentBankWindow: React.FC<TalentBankWindowProps> = ({
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
         {eligibleTalentBank.length === 0 ? (
           <div className="rounded-lg border border-[#7FA6B8]/20 bg-[#081017]/60 p-3.5 text-center text-[11px] text-[#8EAAB8]">
-            Nenhum profissional elegível fora do squad nesta trilha.
+            Nenhum profissional disponível fora do squad nesta trilha.
           </div>
         ) : (
           eligibleTalentBank.map(({ professional: talent }) => {
             const isExpanded = expandedIds.has(talent.id);
-            const topSkills = Object.entries(talent.skills)
+            const topSkills = Object.entries(talent.skills || {})
               .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
               .map(
                 ([sk, lvl]) =>
-                  `${SKILL_LABELS[sk as keyof typeof SKILL_LABELS]} (${lvl}/5)`
+                  `${SKILL_LABELS[sk as keyof typeof SKILL_LABELS] || sk} (${lvl}/5)`
               );
             const rationale = generateMemberJustification(
               talent,
               [...activeMembers, talent],
               params
             );
+            const fullTitle = getProfessionalFullTitle(talent);
 
             return (
               <div
@@ -140,7 +155,7 @@ export const TalentBankWindow: React.FC<TalentBankWindowProps> = ({
                       {talent.id}
                     </span>
                     <span className="text-xs font-semibold text-[#E6EFF4] truncate">
-                      {talent.nome}
+                      {fullTitle}
                     </span>
                   </div>
                   <button
@@ -149,7 +164,7 @@ export const TalentBankWindow: React.FC<TalentBankWindowProps> = ({
                       e.stopPropagation();
                       onToggleExpand(talent.id);
                     }}
-                    aria-label={`Detalhes de ${talent.nome}`}
+                    aria-label={`Detalhes de ${talent.id}`}
                     className={`w-5 h-5 rounded-full flex items-center justify-center border text-xs transition-colors cursor-pointer shrink-0 ${
                       isExpanded
                         ? 'bg-[#8EB8CA] text-[#081017] border-[#8EB8CA]'
@@ -165,7 +180,7 @@ export const TalentBankWindow: React.FC<TalentBankWindowProps> = ({
                 </div>
 
                 <div className="text-[11px] text-[#8EAAB8] truncate">
-                  {talent.cargo}
+                  {talent.trilha} · Sucesso {talent.taxaSucesso}%
                 </div>
 
                 <div className="flex items-center justify-between gap-1 mt-0.5">
@@ -183,7 +198,7 @@ export const TalentBankWindow: React.FC<TalentBankWindowProps> = ({
                       <span className="text-[#8EAAB8]">Domínios: </span>
                       <span className="text-[#E6EFF4]">
                         {talent.dominios
-                          .map((d) => DOMAIN_LABELS[d])
+                          .map((d) => DOMAIN_LABELS[d] || d)
                           .join(' · ')}
                       </span>
                     </div>

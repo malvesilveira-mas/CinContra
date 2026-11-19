@@ -297,7 +297,7 @@ function computeSubIndices(
     (m) =>
       m.senioridade === 'Especialista' ||
       m.senioridade === 'Sênior' ||
-      (m.skills.Seguranca_Cibernetica ?? 0) >= 3
+      (m.skills.Arquitetura_Microsservicos ?? 0) >= 3
   ).length;
   const regulatoryFactor =
     params.criticidadeRegulatoria === 'Alta'

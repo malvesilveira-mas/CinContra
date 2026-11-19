@@ -7,6 +7,7 @@ interface ResultsWindowProps {
   currentEval: SquadEvaluation;
   baselineSquad: SquadEvaluation;
   isModified: boolean;
+  isFeasible?: boolean;
   onMinimize: () => void;
 }
 
@@ -48,17 +49,36 @@ export const ResultsWindow: React.FC<ResultsWindowProps> = ({
   currentEval,
   baselineSquad,
   isModified,
+  isFeasible = true,
   onMinimize,
 }) => {
   const scoreDelta = currentEval.scoreFinal - baselineSquad.scoreFinal;
   const costDelta = currentEval.custoHoraTotal - baselineSquad.custoHoraTotal;
 
+  const uiM = currentEval.ui_metrics;
   const subIndexValues = [
-    { ...SUB_INDEX_META[0], value: currentEval.subIndices.sTecnico },
-    { ...SUB_INDEX_META[1], value: currentEval.subIndices.sDominio },
-    { ...SUB_INDEX_META[2], value: currentEval.subIndices.sQuimica },
-    { ...SUB_INDEX_META[3], value: currentEval.subIndices.sRpg },
-    { ...SUB_INDEX_META[4], value: currentEval.subIndices.sConfiabCusto },
+    {
+      ...SUB_INDEX_META[0],
+      value: uiM?.['Competência Técnica'] ?? currentEval.subIndices.sTecnico,
+    },
+    {
+      ...SUB_INDEX_META[1],
+      value: uiM?.['Domínio do Setor'] ?? currentEval.subIndices.sDominio,
+    },
+    {
+      ...SUB_INDEX_META[2],
+      value: uiM?.['Química da Equipe'] ?? currentEval.subIndices.sQuimica,
+    },
+    {
+      ...SUB_INDEX_META[3],
+      value: uiM?.['Equilíbrio de Perfis'] ?? currentEval.subIndices.sRpg,
+    },
+    {
+      ...SUB_INDEX_META[4],
+      value:
+        uiM?.['Eficiência de Custo & Entrega'] ??
+        currentEval.subIndices.sConfiabCusto,
+    },
   ];
 
   return (
@@ -128,7 +148,7 @@ export const ResultsWindow: React.FC<ResultsWindowProps> = ({
           </div>
         </div>
 
-        {/* Hard Constraint / What-If Status */}
+        {/* Hard Constraint / What-If / Fallback Status (Never zeroes the bars below) */}
         {!currentEval.isValid ? (
           <div
             role="alert"
@@ -136,11 +156,26 @@ export const ResultsWindow: React.FC<ResultsWindowProps> = ({
           >
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#FCA5A5]">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-[#EF4444]" />
-              <span>Restrição do projeto violada</span>
+              <span>
+                {!isFeasible || currentEval.is_fallback
+                  ? 'Modo Fallback Relaxado (restrições flexibilizadas)'
+                  : 'Restrição do projeto violada'}
+              </span>
             </div>
             <ul className="pl-4 list-disc flex flex-col gap-0.5 text-[10px] text-[#FECACA]">
               {currentEval.violations.map((v, idx) => (
-                <li key={`${v.code}-${idx}`}>{v.message}</li>
+                <li key={`${v.rule_id || v.code}-${idx}`}>
+                  {v.rule_id ? (
+                    <>
+                      <strong className="font-semibold text-[#FCA5A5]">
+                        [{v.rule_id}]
+                      </strong>{' '}
+                      {v.message}
+                    </>
+                  ) : (
+                    v.message
+                  )}
+                </li>
               ))}
             </ul>
           </div>

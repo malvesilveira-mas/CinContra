@@ -1,0 +1,25 @@
+# Dependências
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Builds e caches
+cincontra_front/dist/
+.vite/
+.pytest_cache/
+
+# Banco de dados local e variáveis sensíveis
+*.db
+*.sqlite
+*.sqlite3
+.env
+
+# Sistema e IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

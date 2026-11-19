@@ -1,0 +1,150 @@
+# CinContra — Motor Determinístico de Recomendação e Simulação de Squads
+
+Plataforma **White-Box AI** para formação otimizada de squads multidisciplinares com grafo interativo de afinidades/atritos e simulação **What-If** em tempo real via *drag-and-drop*.
+
+O motor matemático determinístico (Branch-and-Bound Hierárquico com bitmasks 64-bit, matrizes 2D $O(1)$ e LUT de sinergia RPG 5x5) encontra recomendações ótimas e diversas em **< 120 ms** sobre a base de **60 profissionais** (`squad_rpg_60.csv`) e recalcula alterações manuais no grafo em **< 5 ms**.
+
+---
+
+## Arquitetura do Sistema
+
+```text
+CinContra/
+├── backend/                  # API REST FastAPI + SQLAlchemy (SQLite) + Motor Branch-and-Bound
+│   ├── app/
+│   │   ├── database.py       # Engine SQLite (suporte a DATABASE_URL em volume Docker)
+│   │   ├── engine.py         # SquadRecommendationEngine (B&B < 120 ms, Fallback Relaxado, What-If < 5 ms)
+│   │   ├── main.py           # Aplicação FastAPI, CORS, lifespan e rotas (/ e /api/v1)
+│   │   ├── models.py         # Modelo ORM ProfessionalModel
+│   │   ├── normalizer.py     # Normalização bidirecional (UI labels <-> códigos canônicos do CSV)
+│   │   ├── schemas.py        # Contratos Pydantic v2 (aceita snake_case e camelCase)
+│   │   └── seed.py           # Seed automático de squad_rpg_60.csv no SQLite
+│   ├── tests/
+│   │   └── test_api.py       # Suíte automatizada validando /professionals, /recommend e /simulate
+│   ├── Dockerfile            # python:3.11-slim + Uvicorn na porta 8000
+│   ├── requirements.txt
+│   └── squad_rpg_60.csv      # Cópia embarcada para build isolado do container
+├── cincontra_front/          # Interface React 19 + TypeScript + Tailwind v4 + Vite 8
+│   ├── src/
+│   │   ├── components/       # Grafo estrelado interativo, Banco de Talentos, Parâmetros e Resultados
+│   │   ├── data/             # Catálogos de labels e tipos canônicos
+│   │   ├── services/api.ts   # Cliente HTTP com rotas relativas (proxy Vite/Nginx)
+│   │   └── types/            # Contratos TypeScript
+│   ├── Dockerfile            # Multi-stage: node:20-alpine (build) -> nginx:alpine
+│   └── nginx.conf            # Proxy reverso para /api/ e /professionals, /recommend, /simulate, /health
+├── docker-compose.yml        # Orquestração backend + frontend + volume sqlite_data
+├── .env.example              # Variáveis de ambiente de referência
+├── matriz-decisao.md         # Especificação matemática (Camadas 1, 2 e 3 + Matriz 5x5)
+├── motor matemático CITi.md  # Arquitetura e referência do algoritmo Branch-and-Bound
+└── squad_rpg_60.csv          # Fonte da verdade dos 60 profissionais
+```
+
+---
+
+## Como Funciona o Motor Matemático (White-Box AI)
+
+### Camada 1 — Hard Constraints ($HC_1$ a $HC_5$)
+
+1. **$HC_1$ (Cardinalidade):** `tamanho_min <= |Q| <= tamanho_max` (range configurável de 4 a 8 membros).
+2. **$HC_2$ (Orçamento):** $\sum_{p \in Q} \text{custo}(p) \le B_{\max}$.
+3. **$HC_3$ (Escopo Técnico por Cobertura de Squad):** Cada skill em `skills_obrigatorias` deve ser coberta por ao menos um membro do squad com nível igual ou superior ao exigido (1 a 5).
+4. **$HC_4$ (Proporção Hierárquica):**
+   - **$HC_{4a}$:** Qualquer trilha com Líder ou Gerente exige $\ge 2$ Executores nessa trilha.
+   - **$HC_{4b}$:** Teto de 1 Líder para cada 3 Executores por trilha.
+   - **$HC_{4c}$:** Gerentes exigem squad com $|Q| \ge 6$ ou `criticidade_regulatoria == "Alta"`.
+5. **$HC_5$ (Atritos e Mediação por Facilitador):** Pares com atrito bilateral crítico (ex.: `P39 <-> P41`) exigem ao menos 1 profissional com arquétipo `Facilitador` no squad. Na Camada 2 (`S_Quimica`), o Facilitador amortece penalidades de atrito em 70% e neutraliza choques entre *Arquiteto Metódico* e *Executor Pragmático*.
+
+### Camada 2 & 3 — Sub-Índices (`ui_metrics`), Pesos Dinâmicos e Comportamento em Violação
+
+$$\text{Score\_Final}(Q) = W_1 S_{\text{Tecnico}} + W_2 S_{\text{Dominio}} + W_3 S_{\text{Quimica}} + W_4 S_{\text{RPG}} + W_5 S_{\text{Confiabilidade\_Custo}}$$
+
+- **Mapeamento na Interface (`Resultados da Combinação`):**
+  - `S_Tecnico` $\rightarrow$ **Competência Técnica**
+  - `S_Dominio` $\rightarrow$ **Domínio do Setor**
+  - `S_Quimica` $\rightarrow$ **Química da Equipe**
+  - `S_RPG` $\rightarrow$ **Equilíbrio de Perfis**
+  - `S_Confiabilidade_Custo` $\rightarrow$ **Eficiência de Custo & Entrega**
+- **Diversidade no Pódio Top 5:** Cada equipe ranqueada (`1º Campeão` ao `5º`) difere de todas as superiores em pelo menos **2 integrantes** (`min_diff_members = 2`).
+- **Busca em 2 Etapas (`/recommend`):** Primeiro busca o Top 5 ideal que atende 100% de $HC_1 \dots HC_5$; caso não exista solução viável, ativa o **Modo Fallback Relaxado** (`is_feasible = false`), retornando os 5 squads de maior `score_final` com `violations` detalhadas e mantendo os valores reais do score e das 5 barras em `ui_metrics`.
+- **Simulação What-If (`/simulate`):** Em violações de $HC_1 \dots HC_5$ via *drag-and-drop*, o motor **não zera** o `score_final` nem as 5 barras em `ui_metrics`, retornando `is_valid = false`, a lista `violations` e exibindo na UI um aviso integrado à estética da aplicação indicando qual regra foi descumprida.
+
+---
+
+## Executando com Docker Compose (Recomendado)
+
+### Pré-requisitos
+- Docker e Docker Compose v2 ativos na máquina.
+
+### Passo a passo
+1. *(Opcional)* Copie o arquivo de variáveis de ambiente:
+   ```bash
+   cp .env.example .env
+   ```
+2. Construa e suba os containers em segundo plano:
+   ```bash
+   docker compose up --build -d
+   ```
+3. Acesse a aplicação:
+   - **Frontend (Nginx + Proxy Reverso):** `http://localhost:3000` (ou `http://<IP-DA-MAQUINA>:3000` em outras máquinas da rede)
+   - **Backend (Swagger/OpenAPI):** `http://localhost:8000/docs`
+   - **Healthcheck:** `http://localhost:8000/health`
+
+O banco SQLite é persistido automaticamente no volume nomeado `sqlite_data` (`/app/data/squads.db`) e populado no startup com os 60 profissionais de `squad_rpg_60.csv`.
+
+---
+
+## Executando Localmente (Desenvolvimento)
+
+### 1. Backend (Python 3.11+)
+```bash
+pip install -r backend/requirements.txt
+uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+```
+*(Para expor na rede local fora do Docker, utilize `--host 0.0.0.0`.)*
+
+### 2. Frontend (Node.js 20+)
+```bash
+cd cincontra_front
+npm install --legacy-peer-deps
+npm run dev
+```
+O servidor Vite inicia em `http://localhost:3000` com proxy configurado em `vite.config.ts` para `http://127.0.0.1:8000`.
+
+---
+
+## Endpoints da API REST
+
+As rotas estão expostas tanto no formato curto quanto sob o prefixo `/api/v1`, aceitando requisições em `snake_case` ou `camelCase` e normalizando automaticamente rótulos da UI (como `"Energia & Utilities"`, `"Séries Temporais"`, `"ML Preditivo"`, `"Integração IoT / SCADA"`).
+
+| Método | Rotas | Descrição |
+| :--- | :--- | :--- |
+| `GET` | `/health` <br> `/api/v1/health` | Status da API e contagem de profissionais indexados. |
+| `GET` | `/professionals` <br> `/api/v1/professionals` | Lista os 60 profissionais do SQLite + catálogos de skills e domínios. |
+| `POST` | `/recommend` <br> `/api/v1/squads/recommend` | Retorna o Top 5 squads recomendados (< 120 ms), pesos aplicados, sub-índices e arestas sociais. |
+| `POST` | `/simulate` <br> `/api/v1/squads/simulate` | Recalcula em tempo real (< 5 ms) o squad modificado via *drag-and-drop*, deltas e violações $HC_1 \dots HC_5$. |
+
+---
+
+## Testes Automatizados
+
+Execute a suíte de validação do backend (seed SQLite, benchmark Neoenergia `5..7` e `6..6`, normalização de labels da UI, fallback relaxado e simulação What-If):
+
+```bash
+python backend/tests/test_api.py
+```
+
+Para validar tipos e build de produção do frontend:
+
+```bash
+npm --prefix cincontra_front run lint
+npm --prefix cincontra_front run build
+```
+
+---
+
+## Ferramentas do Plano Google AI Pro Utilizadas no Fluxo
+
+- **Google AI Studio:** Prototipagem do motor de recomendação, validação da arquitetura e geração da interface inicial (`cincontra_front`) com modelos avançados como Gemini 4 Argon.
+- **Google Colab:** Execução e medição de performance do protótipo do motor em Python com os 60 profissionais (`squad_rpg_60.csv`).
+- **Google Antigravity:** Desenvolvimento agêntico do `/backend` em FastAPI, integração com `cincontra_front`, execução de testes e configuração do ambiente Docker com modelos como Gemini 4 Argon e Opus 5.5.
+- **Pesquisa Google / Google Workspace / Gemini Notebook:** Apoio à pesquisa, documentação e organização do fluxo de trabalho do projeto.

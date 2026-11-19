@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   BarChart3,
@@ -13,8 +13,13 @@ import { ParametersPanel } from './components/ParametersPanel';
 import { ResultsWindow } from './components/ResultsWindow';
 import { SquadRelationGraph } from './components/SquadRelationGraph';
 import { TalentBankWindow } from './components/TalentBankWindow';
-import { DEFAULT_PARAMS, PROFESSIONALS } from './data/professionals';
+import { DEFAULT_PARAMS } from './data/professionals';
 import { evaluateSquad, solveTopSquads } from './engine/scoringEngine';
+import {
+  fetchProfessionalsFromApi,
+  recommendSquadsFromApi,
+  simulateSquadFromApi,
+} from './services/api';
 import {
   AppState,
   Professional,
@@ -26,16 +31,18 @@ import {
 export default function App() {
   const [appState, setAppState] = useState<AppState>('INITIAL');
   const [params, setParams] = useState<SquadParams>(DEFAULT_PARAMS);
+  const [allProfessionals, setAllProfessionals] = useState<Professional[]>([]);
   const [topSquads, setTopSquads] = useState<SquadEvaluation[]>([]);
+  const [isFeasible, setIsFeasible] = useState<boolean>(true);
   const [telemetry, setTelemetry] = useState<SearchTelemetry>({
-    totalCombinationsSpace: 92,
-    combinationsEvaluated: 92,
-    branchesPruned: 0,
+    totalCombinationsSpace: 71663120,
+    combinationsEvaluated: 342,
+    branchesPruned: 18450,
     validFound: 5,
   });
   const [activeTabIdx, setActiveTabIdx] = useState<number>(0);
-  const [whatIfMembersByTab, setWhatIfMembersByTab] = useState<
-    Record<number, Professional[]>
+  const [whatIfEvalByTab, setWhatIfEvalByTab] = useState<
+    Record<number, SquadEvaluation>
   >({});
 
   // Three independent corner-anchored subwindows
@@ -53,6 +60,23 @@ export default function App() {
   const [isDragOverAnimation, setIsDragOverAnimation] =
     useState<boolean>(false);
 
+  // Load the 60 real professionals from GET /api/v1/professionals on startup
+  useEffect(() => {
+    let active = true;
+    fetchProfessionalsFromApi()
+      .then((profs) => {
+        if (active && profs.length > 0) {
+          setAllProfessionals(profs);
+        }
+      })
+      .catch((err) => {
+        console.error('Erro ao buscar profissionais da API:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const handleToggleExpand = useCallback((id: string) => {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -65,26 +89,43 @@ export default function App() {
     });
   }, []);
 
-  const runCalculationCycle = useCallback((nextParams: SquadParams) => {
-    setParams(nextParams);
-    setIsParamsOpen(false);
-    setIsResultsOpen(true);
-    setIsBankOpen(false);
-    setExpandedIds(new Set());
+  const runCalculationCycle = useCallback(
+    async (nextParams: SquadParams) => {
+      setParams(nextParams);
+      setIsParamsOpen(false);
+      setIsResultsOpen(true);
+      setIsBankOpen(false);
+      setExpandedIds(new Set());
+      setAppState('MOVEMENT_1_DOWN');
 
-    const solved = solveTopSquads(PROFESSIONALS, nextParams);
-    setTopSquads(solved.topSquads);
-    setTelemetry(solved.telemetry);
-    setActiveTabIdx(0);
+      try {
+        const result = await recommendSquadsFromApi(nextParams);
+        setTopSquads(result.topSquads);
+        setTelemetry(result.telemetry);
+        setIsFeasible(result.isFeasible);
+        setActiveTabIdx(0);
 
-    const initialMap: Record<number, Professional[]> = {};
-    solved.topSquads.forEach((sq, idx) => {
-      initialMap[idx] = sq.members;
-    });
-    setWhatIfMembersByTab(initialMap);
-
-    setAppState('MOVEMENT_1_DOWN');
-  }, []);
+        const initialEvalMap: Record<number, SquadEvaluation> = {};
+        result.topSquads.forEach((sq, idx) => {
+          initialEvalMap[idx] = sq;
+        });
+        setWhatIfEvalByTab(initialEvalMap);
+      } catch (err) {
+        console.error('Fallback local acionado na recomendação:', err);
+        const solved = solveTopSquads(allProfessionals, nextParams);
+        setTopSquads(solved.topSquads);
+        setTelemetry(solved.telemetry);
+        setIsFeasible(true);
+        setActiveTabIdx(0);
+        const initialEvalMap: Record<number, SquadEvaluation> = {};
+        solved.topSquads.forEach((sq, idx) => {
+          initialEvalMap[idx] = sq;
+        });
+        setWhatIfEvalByTab(initialEvalMap);
+      }
+    },
+    [allProfessionals]
+  );
 
   const handleStartParams = useCallback(() => {
     setAppState('PARAMS');
@@ -99,75 +140,99 @@ export default function App() {
   }, []);
 
   const handleMovement3Done = useCallback(() => {
-    // Enter Estado 4: Parâmetros starts minimized (top-left), Banco de Talentos starts minimized (top-right), Resultados starts open (bottom-left)
     setIsParamsOpen(false);
     setIsBankOpen(false);
     setIsResultsOpen(true);
     setAppState('DASHBOARD');
   }, []);
 
-  const activeMembers = useMemo(
-    () =>
-      whatIfMembersByTab[activeTabIdx] ?? topSquads[activeTabIdx]?.members ?? [],
-    [whatIfMembersByTab, activeTabIdx, topSquads]
-  );
-
   const baselineSquad = topSquads[activeTabIdx] ?? topSquads[0];
 
   const currentEval = useMemo(
-    () => evaluateSquad(activeMembers, params, `active-whatif-${activeTabIdx}`),
-    [activeMembers, params, activeTabIdx]
+    () => whatIfEvalByTab[activeTabIdx] ?? baselineSquad,
+    [whatIfEvalByTab, activeTabIdx, baselineSquad]
+  );
+
+  const activeMembers = useMemo(
+    () => currentEval?.members ?? [],
+    [currentEval]
   );
 
   const isModified = useMemo(() => {
-    if (!baselineSquad) return false;
-    if (baselineSquad.members.length !== activeMembers.length) return true;
+    if (!baselineSquad || !currentEval) return false;
+    if (baselineSquad.members.length !== currentEval.members.length)
+      return true;
     const baseIds = new Set(baselineSquad.members.map((m) => m.id));
-    return activeMembers.some((m) => !baseIds.has(m.id));
-  }, [baselineSquad, activeMembers]);
+    return currentEval.members.some((m) => !baseIds.has(m.id));
+  }, [baselineSquad, currentEval]);
 
-  const handleUpdateMembers = useCallback(
-    (nextMembers: Professional[]) => {
-      setWhatIfMembersByTab((prev) => ({
-        ...prev,
-        [activeTabIdx]: nextMembers,
-      }));
+  const runRealTimeSimulation = useCallback(
+    async (nextMembers: Professional[]) => {
+      const tabIdx = activeTabIdx;
+      const base = topSquads[tabIdx] ?? topSquads[0];
+      const baseIds = base ? base.members.map((m) => m.id) : [];
+      const nextIds = nextMembers.map((m) => m.id);
+
+      try {
+        const simEval = await simulateSquadFromApi(nextIds, baseIds, params);
+        setWhatIfEvalByTab((prev) => ({
+          ...prev,
+          [tabIdx]: simEval,
+        }));
+      } catch (err) {
+        console.error('Fallback local acionado no /simulate:', err);
+        const localEval = evaluateSquad(
+          nextMembers,
+          params,
+          `active-whatif-${tabIdx}`
+        );
+        setWhatIfEvalByTab((prev) => ({
+          ...prev,
+          [tabIdx]: localEval,
+        }));
+      }
     },
-    [activeTabIdx]
+    [activeTabIdx, topSquads, params]
   );
 
   const handleResetActiveSquad = useCallback(() => {
     if (!baselineSquad) return;
-    handleUpdateMembers(baselineSquad.members);
-  }, [baselineSquad, handleUpdateMembers]);
+    setWhatIfEvalByTab((prev) => ({
+      ...prev,
+      [activeTabIdx]: baselineSquad,
+    }));
+  }, [baselineSquad, activeTabIdx]);
 
   const handleSwapMember = useCallback(
     (targetSquadId: string, incomingBankId: string) => {
-      const incoming = PROFESSIONALS.find((p) => p.id === incomingBankId);
+      const incoming = allProfessionals.find((p) => p.id === incomingBankId);
       if (!incoming || activeMembers.some((m) => m.id === incoming.id)) return;
-      handleUpdateMembers(
-        activeMembers.map((m) => (m.id === targetSquadId ? incoming : m))
+      const nextMembers = activeMembers.map((m) =>
+        m.id === targetSquadId ? incoming : m
       );
+      void runRealTimeSimulation(nextMembers);
     },
-    [activeMembers, handleUpdateMembers]
+    [allProfessionals, activeMembers, runRealTimeSimulation]
   );
 
   const handleAddMember = useCallback(
     (incomingBankId: string) => {
       if (activeMembers.length >= params.maxSize) return;
-      const incoming = PROFESSIONALS.find((p) => p.id === incomingBankId);
+      const incoming = allProfessionals.find((p) => p.id === incomingBankId);
       if (!incoming || activeMembers.some((m) => m.id === incoming.id)) return;
-      handleUpdateMembers([...activeMembers, incoming]);
+      const nextMembers = [...activeMembers, incoming];
+      void runRealTimeSimulation(nextMembers);
     },
-    [activeMembers, params.maxSize, handleUpdateMembers]
+    [allProfessionals, activeMembers, params.maxSize, runRealTimeSimulation]
   );
 
   const handleRemoveFromSquad = useCallback(
     (squadMemberId: string) => {
       if (activeMembers.length <= 1) return;
-      handleUpdateMembers(activeMembers.filter((m) => m.id !== squadMemberId));
+      const nextMembers = activeMembers.filter((m) => m.id !== squadMemberId);
+      void runRealTimeSimulation(nextMembers);
     },
-    [activeMembers, handleUpdateMembers]
+    [activeMembers, runRealTimeSimulation]
   );
 
   const handleMinimizeAll = useCallback(() => {
@@ -271,7 +336,7 @@ export default function App() {
       {/* ESTADO 4: CENTRAL GRAPH INTEGRATED DIRECTLY ONTO DARK NAVY BACKGROUND */}
       {/* ===================================================================== */}
       <AnimatePresence>
-        {isDashboard && topSquads.length > 0 && (
+        {isDashboard && topSquads.length > 0 && currentEval && (
           <>
             {/* 1. TOP-CENTER INTEGRATED TOP 5 SQUADS BAR (NO FRAME, NO MINIMIZE) */}
             <motion.nav
@@ -290,7 +355,7 @@ export default function App() {
               >
                 {topSquads.map((sq, idx) => {
                   const isActive = idx === activeTabIdx;
-                  const displayEval = isActive ? currentEval : sq;
+                  const displayEval = whatIfEvalByTab[idx] ?? sq;
                   return (
                     <button
                       key={sq.id}
@@ -432,7 +497,7 @@ export default function App() {
       )}
 
       <AnimatePresence>
-        {isDashboard && isResultsOpen && baselineSquad && (
+        {isDashboard && isResultsOpen && baselineSquad && currentEval && (
           <motion.div
             key="corner-results-window"
             initial={{ opacity: 0, y: 12 }}
@@ -446,6 +511,7 @@ export default function App() {
               currentEval={currentEval}
               baselineSquad={baselineSquad}
               isModified={isModified}
+              isFeasible={isFeasible}
               onMinimize={() => setIsResultsOpen(false)}
             />
           </motion.div>
@@ -493,7 +559,7 @@ export default function App() {
           >
             <TalentBankWindow
               params={params}
-              allProfessionals={PROFESSIONALS}
+              allProfessionals={allProfessionals}
               activeMembers={activeMembers}
               expandedIds={expandedIds}
               onToggleExpand={handleToggleExpand}

@@ -33,21 +33,33 @@ export type RpgArchetype =
 
 export type Track = 'Engenharia' | 'Dados' | 'Produto & Design';
 
-export type Seniority = 'Pleno' | 'Sênior' | 'Especialista';
+export type Seniority = 'Júnior' | 'Pleno' | 'Sênior' | 'Especialista';
 
 export type SkillKey =
-  | 'Series_Temporais'
-  | 'Machine_Learning_Preditivo'
+  | 'APIs_REST'
+  | 'Arquitetura_Microsservicos'
+  | 'Cloud_AWS_GCP'
+  | 'Docker_K8s'
   | 'Integracao_IoT_SCADA'
+  | 'Node.js'
   | 'Python'
-  | 'Arquitetura_Cloud'
-  | 'Engenharia_Dados'
-  | 'UX_UI_Design'
-  | 'DevOps_SRE'
-  | 'Seguranca_Cibernetica'
-  | 'Visao_Computacional'
-  | 'API_Backend'
-  | 'Produto_Agil';
+  | 'React'
+  | 'Engenharia_ETL'
+  | 'Estatistica'
+  | 'Machine_Learning_Preditivo'
+  | 'PowerBI_Looker'
+  | 'Python_DS'
+  | 'SQL_Avancado'
+  | 'Series_Temporais'
+  | 'Spark'
+  | 'Data_Visualization'
+  | 'Design_System'
+  | 'Discovery_Usuario'
+  | 'Gestao_Stakeholders'
+  | 'Metricas_Produto'
+  | 'Prototipacao_Figma'
+  | 'Roadmap_Agil'
+  | 'UX_Research';
 
 export interface RequiredSkill {
   skill: SkillKey;
@@ -72,10 +84,13 @@ export interface Professional {
   trilha: Track;
   senioridade: Seniority;
   custoHora: number;
+  custo_hora_brl?: number;
   arquetipo: RpgArchetype;
   dominios: DomainSector[];
   skills: Partial<Record<SkillKey, 1 | 2 | 3 | 4 | 5>>;
+  hard_skills?: Partial<Record<SkillKey, number>>;
   taxaSucesso: number; // 0-100
+  taxa_sucesso_pct?: number;
   afinidades_ids: string[];
   atritos_ids: string[];
 }
@@ -101,14 +116,27 @@ export interface SubIndices {
   sConfiabCusto: number;
 }
 
+export interface UiMetricsMap {
+  'Competência Técnica': number;
+  'Domínio do Setor': number;
+  'Química da Equipe': number;
+  'Equilíbrio de Perfis': number;
+  'Eficiência de Custo & Entrega': number;
+}
+
 export interface SocialEdge {
   fromId: string;
   toId: string;
   type: 'afinidade' | 'atrito';
+  bilateral?: boolean;
   cushionedByFacilitator: boolean;
+  points?: number;
+  label?: string;
 }
 
 export interface ConstraintViolation {
+  rule_id?: string;
+  rule_name?: string;
   code:
     | 'BUDGET_EXCEEDED'
     | 'MISSING_SKILL'
@@ -125,17 +153,24 @@ export interface MemberWithRationale {
 
 export interface SquadEvaluation {
   id: string;
+  rank?: number;
+  member_ids?: string[];
   members: Professional[];
   membersWithRationale: MemberWithRationale[];
   scoreFinal: number;
+  score_final?: number;
   custoHoraTotal: number;
+  custo_total?: number;
   taxaSucessoMedia: number;
   weights: DynamicWeights;
   subIndices: SubIndices;
+  ui_metrics?: UiMetricsMap;
   edges: SocialEdge[];
   hasFacilitator: boolean;
   violations: ConstraintViolation[];
   isValid: boolean;
+  is_valid?: boolean;
+  is_fallback?: boolean;
 }
 
 export interface SearchTelemetry {
@@ -143,4 +178,5 @@ export interface SearchTelemetry {
   combinationsEvaluated: number;
   branchesPruned: number;
   validFound: number;
+  executionTimeMs?: number;
 }

@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { AlertTriangle, Plus, ShieldCheck, X } from 'lucide-react';
-import { DOMAIN_LABELS, SKILL_LABELS } from '../data/professionals';
+import {
+  DOMAIN_LABELS,
+  getProfessionalFullTitle,
+  getProfessionalShortLabel,
+  SKILL_LABELS,
+} from '../data/professionals';
 import { MemberWithRationale, SocialEdge } from '../types/cincontra';
 
 interface SquadRelationGraphProps {
@@ -199,7 +204,7 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
 
           return (
             <g
-              key={`${edge.fromId}-${edge.toId}`}
+              key={`${edge.fromId}-${edge.toId}-${idx}`}
               opacity={isHighlighted ? 1 : 0.25}
             >
               {/* Faint static guide so cushioned friction dashes remain recognizable */}
@@ -239,14 +244,16 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
         const isDropTarget = dragOverBalloonId === member.id;
         const isBeingDragged = draggingId === member.id;
 
-        const topSkills = Object.entries(member.skills)
+        const topSkills = Object.entries(member.skills || {})
           .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
           .map(
             ([sk, lvl]) =>
-              `${SKILL_LABELS[sk as keyof typeof SKILL_LABELS]} (${lvl}/5)`
+              `${SKILL_LABELS[sk as keyof typeof SKILL_LABELS] || sk} (${lvl}/5)`
           );
 
         const openUpward = coord.yPct > 56;
+        const shortLabel = getProfessionalShortLabel(member);
+        const fullTitle = getProfessionalFullTitle(member);
 
         return (
           <div
@@ -319,7 +326,7 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
                     {member.id}
                   </span>
                   <span className="text-xs font-semibold text-[#E6EFF4] truncate">
-                    {member.nome.split(' ')[0]}
+                    {shortLabel}
                   </span>
                 </div>
                 <button
@@ -328,7 +335,7 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
                     e.stopPropagation();
                     onToggleExpand(member.id);
                   }}
-                  aria-label={`Detalhes de ${member.nome}`}
+                  aria-label={`Detalhes de ${member.id}`}
                   className={`w-5 h-5 rounded-full flex items-center justify-center border text-xs transition-colors cursor-pointer shrink-0 ${
                     isExpanded
                       ? 'bg-[#8EB8CA] text-[#081017] border-[#8EB8CA]'
@@ -365,7 +372,7 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
               >
                 <div className="flex items-center justify-between gap-2 border-b border-[#7FA6B8]/20 pb-1.5 mb-2">
                   <span className="text-xs font-semibold text-[#E6EFF4] truncate">
-                    {member.nome} ({member.id})
+                    {member.id} · {fullTitle}
                   </span>
                   <span className="font-grotesk text-xs font-semibold text-[#A3C9D9] shrink-0">
                     R$ {member.custoHora}/h
@@ -374,10 +381,16 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
 
                 <div className="flex flex-col gap-1.5 text-[11px]">
                   <div>
+                    <span className="text-[#8EAAB8]">Trilha: </span>
+                    <span className="text-[#E6EFF4]">
+                      {member.trilha} · Sucesso {member.taxaSucesso}%
+                    </span>
+                  </div>
+                  <div>
                     <span className="text-[#8EAAB8]">Domínios: </span>
                     <span className="text-[#E6EFF4]">
                       {member.dominios
-                        .map((d) => DOMAIN_LABELS[d])
+                        .map((d) => DOMAIN_LABELS[d] || d)
                         .join(' · ')}
                     </span>
                   </div>
