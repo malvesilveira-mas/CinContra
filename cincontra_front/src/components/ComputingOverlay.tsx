@@ -23,7 +23,6 @@ const STAGES = [
 
 export const ComputingOverlay: React.FC<LiveLogoStageProps> = ({
   appState,
-  telemetry,
   onStartParams,
   onMovement1Done,
   onMovement2Done,
@@ -84,10 +83,7 @@ export const ComputingOverlay: React.FC<LiveLogoStageProps> = ({
     [...STAGES].reverse().find((s) => progress >= s.at)?.label ??
     STAGES[0].label;
 
-  const displayedEval = Math.min(
-    telemetry.combinationsEvaluated,
-    Math.max(1, Math.round(telemetry.combinationsEvaluated * progress))
-  );
+  const progressPct = Math.min(100, Math.max(0, Math.floor(progress * 100)));
 
   // Compute dynamic position and expansion directly on background (no box frame)
   let containerStyle: React.CSSProperties = {};
@@ -183,7 +179,7 @@ export const ComputingOverlay: React.FC<LiveLogoStageProps> = ({
             <span className="text-[11px] text-[#8EAAB8]">
               Combinações avaliadas:{' '}
               <strong className="font-grotesk text-[#E6EFF4]">
-                {displayedEval}/{telemetry.totalCombinationsSpace}
+                {progressPct}%
               </strong>
             </span>
             <button

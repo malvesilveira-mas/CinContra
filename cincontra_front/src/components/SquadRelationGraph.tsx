@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Plus, ShieldCheck, X } from 'lucide-react';
 import {
   DOMAIN_LABELS,
@@ -19,74 +19,178 @@ interface SquadRelationGraphProps {
   onDraggingMemberChange: (memberId: string | null) => void;
 }
 
-interface NodePctCoord {
-  xPct: number;
-  yPct: number;
+interface NodePixelCoord {
+  x: number;
+  y: number;
 }
 
-/**
- * Asymmetric star-constellation node placements inspired by the CinContra logo,
- * rendered directly over the central dark navy background without any subwindow frame.
- */
-function getStarCoordsPct(count: number): NodePctCoord[] {
-  if (count <= 1) return [{ xPct: 50, yPct: 50 }];
-  if (count === 2)
-    return [
-      { xPct: 33, yPct: 50 },
-      { xPct: 67, yPct: 50 },
-    ];
-  if (count === 3)
-    return [
-      { xPct: 50, yPct: 22 },
-      { xPct: 28, yPct: 74 },
-      { xPct: 72, yPct: 72 },
-    ];
-  if (count === 4)
-    return [
-      { xPct: 48, yPct: 20 },
-      { xPct: 75, yPct: 48 },
-      { xPct: 53, yPct: 80 },
-      { xPct: 24, yPct: 52 },
-    ];
-  if (count === 5)
-    return [
-      { xPct: 48, yPct: 18 },
-      { xPct: 76, yPct: 38 },
-      { xPct: 68, yPct: 78 },
-      { xPct: 31, yPct: 78 },
-      { xPct: 24, yPct: 40 },
-    ];
-  if (count === 6)
-    return [
-      { xPct: 47, yPct: 17 },
-      { xPct: 77, yPct: 36 },
-      { xPct: 70, yPct: 80 },
-      { xPct: 30, yPct: 80 },
-      { xPct: 23, yPct: 38 },
-      { xPct: 50, yPct: 50 }, // Inner hub
-    ];
-  if (count === 7)
-    return [
-      { xPct: 46, yPct: 16 },
-      { xPct: 75, yPct: 28 },
-      { xPct: 78, yPct: 68 },
-      { xPct: 53, yPct: 83 },
-      { xPct: 25, yPct: 74 },
-      { xPct: 22, yPct: 35 },
-      { xPct: 50, yPct: 50 }, // Inner hub
-    ];
+interface ComputedLayout {
+  nodes: NodePixelCoord[];
+  nodeScale: number;
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+}
 
-  const presets8: NodePctCoord[] = [
-    { xPct: 45, yPct: 15 },
-    { xPct: 75, yPct: 25 },
-    { xPct: 79, yPct: 62 },
-    { xPct: 62, yPct: 84 },
-    { xPct: 28, yPct: 80 },
-    { xPct: 21, yPct: 36 },
-    { xPct: 41, yPct: 46 },
-    { xPct: 60, yPct: 54 },
-  ];
-  return presets8.slice(0, count);
+const BASE_CARD_W = 168;
+const BASE_CARD_H = 78;
+const MIN_GAP = 16;
+const EDGE_PAD = 10;
+const LEGEND_RESERVED_H = 34;
+
+function getRingAngles(count: number): number[] {
+  if (count <= 1) return [0];
+  if (count === 2) return [Math.PI, 0];
+  if (count === 3) {
+    return [-Math.PI / 2, Math.PI / 6, (5 * Math.PI) / 6];
+  }
+  if (count === 4) {
+    return [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
+  }
+  if (count === 6) {
+    // Flat-top hexagon: 2 top, 2 middle sides, 2 bottom — maximum clearance
+    return [
+      (-2 * Math.PI) / 3,
+      -Math.PI / 3,
+      0,
+      Math.PI / 3,
+      (2 * Math.PI) / 3,
+      Math.PI,
+    ];
+  }
+  if (count === 8) {
+    // Shifted octagon: 2 top, 2 upper-sides, 2 lower-sides, 2 bottom
+    return Array.from(
+      { length: 8 },
+      (_, i) => -Math.PI / 2 - Math.PI / 8 + (i * Math.PI) / 4
+    );
+  }
+  // Odd counts (5, 7, 9+): peak at top center, evenly distributed around ellipse
+  return Array.from(
+    { length: count },
+    (_, i) => -Math.PI / 2 + (i * Math.PI * 2) / count
+  );
+}
+
+function solveNonOverlappingLayout(
+  count: number,
+  width: number,
+  height: number
+): ComputedLayout {
+  const safeW = Math.max(320, width);
+  const safeH = Math.max(220, height);
+  const usableH = Math.max(180, safeH - LEGEND_RESERVED_H);
+  const cx = safeW / 2;
+  const cy = usableH / 2;
+
+  if (count <= 0) {
+    return {
+      nodes: [],
+      nodeScale: 1,
+      cx,
+      cy,
+      rx: safeW * 0.34,
+      ry: usableH * 0.36,
+    };
+  }
+
+  const candidateScales = [1, 0.94, 0.88, 0.82, 0.76, 0.7, 0.64, 0.58];
+  const angles = getRingAngles(count);
+
+  let bestResult: ComputedLayout | null = null;
+
+  for (const scale of candidateScales) {
+    const cardW = BASE_CARD_W * scale;
+    const cardH = BASE_CARD_H * scale;
+    const minDx = cardW + MIN_GAP * scale;
+    const minDy = cardH + MIN_GAP * scale;
+
+    const minX = cardW / 2 + EDGE_PAD;
+    const maxX = Math.max(minX, safeW - cardW / 2 - EDGE_PAD);
+    const minY = cardH / 2 + EDGE_PAD;
+    const maxY = Math.max(minY, usableH - cardH / 2 - EDGE_PAD);
+
+    const maxRx = Math.max(0, (maxX - minX) / 2);
+    const maxRy = Math.max(0, (maxY - minY) / 2);
+
+    const rxFactor = count <= 2 ? 0.56 : count <= 4 ? 0.84 : 0.96;
+    const ryFactor = count <= 2 ? 0 : count <= 4 ? 0.88 : 0.96;
+    const rx = maxRx * rxFactor;
+    const ry = maxRy * ryFactor;
+
+    const pts: NodePixelCoord[] =
+      count === 1
+        ? [{ x: cx, y: cy }]
+        : angles.map((angle) => ({
+            x: cx + Math.cos(angle) * rx,
+            y: cy + Math.sin(angle) * ry,
+          }));
+
+    // Deterministic AABB collision-resolution solver
+    let hasOverlap = false;
+    for (let iter = 0; iter < 50; iter++) {
+      hasOverlap = false;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const dx = pts[j].x - pts[i].x;
+          const dy = pts[j].y - pts[i].y;
+          const overlapX = minDx - Math.abs(dx);
+          const overlapY = minDy - Math.abs(dy);
+
+          if (overlapX > 0.5 && overlapY > 0.5) {
+            hasOverlap = true;
+            if (overlapX < overlapY) {
+              const push = overlapX / 2 + 0.5;
+              const dir = dx === 0 ? (i % 2 === 0 ? 1 : -1) : Math.sign(dx);
+              pts[i].x -= dir * push;
+              pts[j].x += dir * push;
+            } else {
+              const push = overlapY / 2 + 0.5;
+              const dir = dy === 0 ? (i % 2 === 0 ? 1 : -1) : Math.sign(dy);
+              pts[i].y -= dir * push;
+              pts[j].y += dir * push;
+            }
+          }
+        }
+      }
+
+      for (let i = 0; i < pts.length; i++) {
+        pts[i].x = Math.min(maxX, Math.max(minX, pts[i].x));
+        pts[i].y = Math.min(maxY, Math.max(minY, pts[i].y));
+      }
+
+      if (!hasOverlap) break;
+    }
+
+    let stillOverlapping = false;
+    for (let i = 0; i < pts.length && !stillOverlapping; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        if (
+          Math.abs(pts[j].x - pts[i].x) < cardW + 4 &&
+          Math.abs(pts[j].y - pts[i].y) < cardH + 4
+        ) {
+          stillOverlapping = true;
+          break;
+        }
+      }
+    }
+
+    bestResult = {
+      nodes: pts,
+      nodeScale: scale,
+      cx,
+      cy,
+      rx: Math.max(40, rx * 0.92),
+      ry: Math.max(30, ry * 0.92),
+    };
+
+    if (!stillOverlapping) {
+      return bestResult;
+    }
+  }
+
+  return bestResult!;
 }
 
 export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
@@ -99,6 +203,11 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
   onAddMember,
   onDraggingMemberChange,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState<{ width: number; height: number }>({
+    width: 880,
+    height: 430,
+  });
   const [hoveredMemberId, setHoveredMemberId] = useState<string | null>(null);
   const [dragOverBalloonId, setDragOverBalloonId] = useState<string | null>(
     null
@@ -106,20 +215,61 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
   const [isDragOverFreeCenter, setIsDragOverFreeCenter] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
-  const coords = getStarCoordsPct(membersWithRationale.length);
-  const posById = new Map<string, NodePctCoord>();
-  membersWithRationale.forEach((item, idx) => {
-    posById.set(
-      item.professional.id,
-      coords[idx] ?? { xPct: 50, yPct: 50 }
-    );
-  });
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    // Use clientWidth/clientHeight (untransformed CSS layout box) so parent
+    // entrance scale animations never skew balloon vs SVG coordinates.
+    const updateSize = () => {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w > 0 && h > 0) {
+        setSize((prev) =>
+          Math.abs(prev.width - w) > 1 || Math.abs(prev.height - h) > 1
+            ? { width: w, height: h }
+            : prev
+        );
+      }
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(el);
+    window.addEventListener('resize', updateSize, { passive: true });
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
+  }, []);
+
+  const layout = useMemo(
+    () =>
+      solveNonOverlappingLayout(
+        membersWithRationale.length,
+        size.width,
+        size.height
+      ),
+    [membersWithRationale.length, size.width, size.height]
+  );
+
+  const posById = useMemo(() => {
+    const map = new Map<string, NodePixelCoord>();
+    membersWithRationale.forEach((item, idx) => {
+      map.set(
+        item.professional.id,
+        layout.nodes[idx] ?? { x: layout.cx, y: layout.cy }
+      );
+    });
+    return map;
+  }, [membersWithRationale, layout]);
 
   const affinityEdges = edges.filter((e) => e.type === 'afinidade');
   const frictionEdges = edges.filter((e) => e.type === 'atrito');
 
   return (
     <div
+      ref={containerRef}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes('application/x-cincontra-bank')) {
           e.preventDefault();
@@ -152,16 +302,16 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
 
       {/* Direct SVG Edges over Background */}
       <svg
-        viewBox="0 0 1000 500"
+        viewBox={`0 0 ${size.width} ${size.height}`}
         preserveAspectRatio="none"
         className="pointer-events-none absolute inset-0 w-full h-full"
       >
         {/* Subtle constellation guide ellipse */}
         <ellipse
-          cx={500}
-          cy={250}
-          rx={285}
-          ry={175}
+          cx={layout.cx}
+          cy={layout.cy}
+          rx={layout.rx}
+          ry={layout.ry}
           fill="none"
           stroke="#7FA6B8"
           strokeOpacity={0.08}
@@ -174,25 +324,29 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
           const p2 = posById.get(edge.toId);
           if (!p1 || !p2) return null;
 
-          const x1 = p1.xPct * 10;
-          const y1 = p1.yPct * 5;
-          const x2 = p2.xPct * 10;
-          const y2 = p2.yPct * 5;
+          const x1 = p1.x;
+          const y1 = p1.y;
+          const x2 = p2.x;
+          const y2 = p2.y;
 
           const mx = (x1 + x2) / 2;
           const my = (y1 + y2) / 2;
           const dx = x2 - x1;
           const dy = y2 - y1;
           const len = Math.hypot(dx, dy) || 1;
-          const approxLen = Math.ceil(len + 28);
-          const curve = idx % 2 === 0 ? 22 : -22;
+          const curve = idx % 2 === 0 ? 18 : -18;
           const cx = mx - (dy / len) * curve;
           const cy = my + (dx / len) * curve;
 
+          // Accurate quadratic Bezier arc length estimate so animated dash runs node-to-node
+          const polyLen =
+            Math.hypot(cx - x1, cy - y1) + Math.hypot(x2 - cx, y2 - cy);
+          const approxLen = Math.ceil((len + polyLen) * 0.5 + 4);
+
           const pathD =
             idx % 2 === 0
-              ? `M ${x1} ${y1} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${x2} ${y2}`
-              : `M ${x2} ${y2} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${x1} ${y1}`;
+              ? `M ${x1.toFixed(1)} ${y1.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`
+              : `M ${x2.toFixed(1)} ${y2.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`;
 
           const isAffinity = edge.type === 'afinidade';
           const isHighlighted =
@@ -205,19 +359,22 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
           return (
             <g
               key={`${edge.fromId}-${edge.toId}-${idx}`}
-              opacity={isHighlighted ? 1 : 0.25}
+              opacity={isHighlighted ? 1 : 0.22}
             >
-              {/* Faint static guide so cushioned friction dashes remain recognizable */}
-              {!isAffinity && edge.cushionedByFacilitator && (
-                <path
-                  d={pathD}
-                  fill="none"
-                  stroke={edgeColor}
-                  strokeWidth={1.6}
-                  strokeOpacity={0.28}
-                  strokeDasharray="7 5"
-                />
-              )}
+              {/* Subtle continuous anchor line so connections always visibly link both balloons */}
+              <path
+                d={pathD}
+                fill="none"
+                stroke={edgeColor}
+                strokeWidth={1.3}
+                strokeOpacity={
+                  !isAffinity && edge.cushionedByFacilitator ? 0.34 : 0.22
+                }
+                strokeDasharray={
+                  !isAffinity && edge.cushionedByFacilitator ? '6 5' : undefined
+                }
+              />
+              {/* Animated retract/extend pulse matching the CinContra loading logo */}
               <path
                 d={pathD}
                 fill="none"
@@ -239,7 +396,9 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
 
       {/* Member Balloons as Vertices directly on Dark Background */}
       {membersWithRationale.map(({ professional: member, justificativa }) => {
-        const coord = posById.get(member.id) ?? { xPct: 50, yPct: 50 };
+        const coord = posById.get(member.id) ?? { x: layout.cx, y: layout.cy };
+        const xPct = (coord.x / size.width) * 100;
+        const yPct = (coord.y / size.height) * 100;
         const isExpanded = expandedIds.has(member.id);
         const isDropTarget = dragOverBalloonId === member.id;
         const isBeingDragged = draggingId === member.id;
@@ -251,7 +410,15 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
               `${SKILL_LABELS[sk as keyof typeof SKILL_LABELS] || sk} (${lvl}/5)`
           );
 
-        const openUpward = coord.yPct > 56;
+        const openUpward = coord.y > size.height * 0.64 && coord.y > 240;
+        const nearLeft = coord.x < 150;
+        const nearRight = coord.x > size.width - 150;
+        const popoverHorizontalClass = nearLeft
+          ? 'left-0'
+          : nearRight
+            ? 'right-0'
+            : 'left-1/2 -translate-x-1/2';
+
         const shortLabel = getProfessionalShortLabel(member);
         const fullTitle = getProfessionalFullTitle(member);
 
@@ -259,10 +426,11 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
           <div
             key={member.id}
             style={{
-              left: `${coord.xPct}%`,
-              top: `${coord.yPct}%`,
+              left: `${xPct}%`,
+              top: `${yPct}%`,
+              transform: `translate(-50%, -50%) scale(${layout.nodeScale})`,
             }}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 ${
+            className={`absolute transition-[left,top] duration-300 ease-out ${
               isExpanded ? 'z-30' : 'z-20'
             }`}
           >
@@ -366,7 +534,7 @@ export const SquadRelationGraph: React.FC<SquadRelationGraphProps> = ({
             {isExpanded && (
               <div
                 onClick={(e) => e.stopPropagation()}
-                className={`absolute left-1/2 -translate-x-1/2 w-[250px] rounded-xl cin-panel p-3 shadow-2xl z-40 text-left ${
+                className={`absolute ${popoverHorizontalClass} w-[250px] rounded-xl cin-panel p-3 shadow-2xl z-40 text-left ${
                   openUpward ? 'bottom-[calc(100%+8px)]' : 'top-[calc(100%+8px)]'
                 }`}
               >
