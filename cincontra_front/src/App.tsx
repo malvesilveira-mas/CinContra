@@ -346,12 +346,12 @@ export default function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.28 }}
               aria-label="Seletor das Top 5 Equipes"
-              className="fixed top-3 inset-x-0 z-30 flex items-center justify-center pointer-events-none px-4"
+              className="fixed top-3 inset-x-0 z-30 flex items-center justify-center pointer-events-none px-4 md:pr-[80px] xl:pr-4"
             >
               <div
                 role="tablist"
                 aria-label="Top 5 Equipes"
-                className="pointer-events-auto flex items-center gap-1.5 sm:gap-2"
+                className="pointer-events-auto flex items-center gap-1 xl:gap-2"
               >
                 {topSquads.map((sq, idx) => {
                   const isActive = idx === activeTabIdx;
@@ -363,7 +363,7 @@ export default function App() {
                       role="tab"
                       aria-selected={isActive}
                       onClick={() => setActiveTabIdx(idx)}
-                      className={`px-2.5 py-1 text-left transition-all cursor-pointer border-b-2 ${
+                      className={`px-1.5 xl:px-2.5 py-1 text-left transition-all cursor-pointer border-b-2 ${
                         isActive
                           ? 'border-[#A3C9D9] text-[#E6EFF4]'
                           : 'border-transparent text-[#8EAAB8] hover:text-[#CFE0E8] hover:border-[#7FA6B8]/40'
@@ -405,9 +405,17 @@ export default function App() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-x-0 top-[68px] bottom-[max(220px,35vh)] z-20 flex items-center justify-center pointer-events-none"
+              className={`fixed inset-x-0 top-[68px] bottom-[max(220px,35vh)] z-20 flex items-center justify-center pointer-events-none px-3 sm:px-5 transition-[padding] duration-300 ease-out ${
+                isBankOpen ? 'md:pr-[304px] xl:pr-[min(calc(22vw+28px),352px)]' : ''
+              } ${
+                isParamsOpen
+                  ? 'md:pl-[374px]'
+                  : isResultsOpen
+                    ? '[@media(max-height:820px)]:md:pl-[376px]'
+                    : ''
+              }`}
             >
-              <div className="pointer-events-auto w-full max-w-[700px] h-full">
+              <div className="pointer-events-auto w-full max-w-[920px] h-full">
                 <SquadRelationGraph
                   membersWithRationale={currentEval.membersWithRationale}
                   edges={currentEval.edges}
