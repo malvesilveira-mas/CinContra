@@ -156,3 +156,5 @@ npm --prefix cincontra_front run build
 - **Google Antigravity:** Desenvolvimento agêntico do `/backend` em FastAPI, integração com `cincontra_front`, ajustes de layout responsivo, execução de testes, validação visual no navegador e configuração do ambiente Docker com modelos como Gemini 4 Argon e Opus 5.5.
 - **Pesquisa Google / Google Workspace / Gemini Notebook:** Apoio à pesquisa, documentação e organização do fluxo de trabalho do projeto.
 - **Gemini:** Planejamento geral do projeto
+- **ElevenLabs:** Geração da voz
+- **Google Flow:** Geração do vídeo
