@@ -26,7 +26,7 @@ CinContra/
 │   └── squad_rpg_60.csv      # Cópia embarcada para build isolado do container
 ├── cincontra_front/          # Interface React 19 + TypeScript + Tailwind v4 + Vite 8
 │   ├── src/
-│   │   ├── components/       # Grafo estrelado interativo, Banco de Talentos, Parâmetros e Resultados
+│   │   ├── components/       # Grafo anticolisão (AABB + ResizeObserver), cenário cel line-art, carregamento 0%–100%, Banco, Parâmetros e Resultados
 │   │   ├── data/             # Catálogos de labels e tipos canônicos
 │   │   ├── services/api.ts   # Cliente HTTP com rotas relativas (proxy Vite/Nginx)
 │   │   └── types/            # Contratos TypeScript
@@ -38,6 +38,12 @@ CinContra/
 ├── motor matemático CITi.md  # Arquitetura e referência do algoritmo Branch-and-Bound
 └── squad_rpg_60.csv          # Fonte da verdade dos 60 profissionais
 ```
+
+### Interface & UX (`cincontra_front`)
+
+- **Grafo Interativo Anticolisão (`SquadRelationGraph.tsx` + `App.tsx`):** posicionamento em anel com *solver* determinístico AABB, escala adaptativa via `ResizeObserver`, popovers com abertura inteligente próxima às bordas e área segura responsiva para evitar sobreposição com `Resultados da Combinação`, `Banco de Talentos` e `Parâmetros`.
+- **Cenário Animado Inferior (`BottomSceneryCanvas.tsx`):** personagem estilizado em *cel line-art* com transições contínuas entre os cenários urbano (com fones e notas musicais), natureza e submarino.
+- **Carregamento Progressivo (`ComputingOverlay.tsx`):** janela de processamento estético de `30` segundos exibindo o progresso das combinações avaliadas em porcentagem (`0%` a `100%`), com atalho de conclusão imediata para demonstração.
 
 ---
 
@@ -145,8 +151,8 @@ npm --prefix cincontra_front run build
 
 ## Ferramentas do Plano Google AI Pro Utilizadas no Fluxo
 
-- **Google AI Studio:** Prototipagem do motor de recomendação, validação da arquitetura e geração da interface inicial (`cincontra_front`) com modelos avançados como Gemini 4 Argon.
+- **Google AI Studio:** Prototipagem do motor de recomendação, validação da arquitetura, geração da interface inicial (`cincontra_front`) e refinamentos visuais do personagem em *cel line-art* e do grafo anticolisão com modelos avançados como Gemini 4 Argon.
 - **Google Colab:** Execução e medição de performance do protótipo do motor em Python com os 60 profissionais (`squad_rpg_60.csv`).
-- **Google Antigravity:** Desenvolvimento agêntico do `/backend` em FastAPI, integração com `cincontra_front`, execução de testes e configuração do ambiente Docker com modelos como Gemini 4 Argon e Opus 5.5.
+- **Google Antigravity:** Desenvolvimento agêntico do `/backend` em FastAPI, integração com `cincontra_front`, ajustes de layout responsivo, execução de testes, validação visual no navegador e configuração do ambiente Docker com modelos como Gemini 4 Argon e Opus 5.5.
 - **Pesquisa Google / Google Workspace / Gemini Notebook:** Apoio à pesquisa, documentação e organização do fluxo de trabalho do projeto.
 - **Gemini:** Planejamento geral do projeto
