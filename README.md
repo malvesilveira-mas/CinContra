@@ -6,6 +6,49 @@ O motor matemático determinístico (Branch-and-Bound Hierárquico com bitmasks 
 
 ---
 
+# CinContra — Engenharia Explicável de Squads (*White-Box AI*)
+
+O **CinContra** substitui a montagem manual e intuitiva de equipes de tecnologia por uma arquitetura determinística e explicável (*White-Box AI*). A plataforma cruza requisitos técnicos do projeto, experiência setorial, arquétipos comportamentais, orçamento/hora e histórico interpessoal (afinidades e atritos) para encontrar e validar a formação ideal em menos de **200 ms**.
+
+---
+
+## Funcionalidades Principais
+
+* **Configuração de Parâmetros da Missão (Painel Esquerdo):**
+  * **Setor e Tipo de Solução:** Define o contexto de negócio (ex.: *Energia & Utilities*, *Fintech*, *Saúde*) e a natureza técnica da entrega (ex.: *ML Preditivo*, *Integração IoT / SCADA*, *Séries Temporais*).
+  * **Skills Obrigatórias e Nível Mínimo:** Exige competências técnicas específicas e o nível de proficiência mínimo (`1` a `5`) que o squad deve cobrir.
+  * **Restrições Operacionais:** Controla o **Orçamento Máximo por Hora (`R$/h`)**, o **Tamanho da Equipe** (mínimo e máximo de membros), o **Prazo** e o **Nível de Criticidade**.
+* **Motor de Recomendação Automática (Top 5 Squads):**
+  * Executa um algoritmo *Branch-and-Bound* determinístico sobre a base de talentos (`squad_rpg_60.csv`) e ranqueia as **5 melhores formações** (`1º Campeão` ao `5º`).
+  * **Modo Fallback Inteligente (*Soft Constraints*):** Caso o usuário defina parâmetros impossíveis de cumprir simultaneamente, a plataforma flexibiliza automaticamente as travas, entrega o Top 5 com o maior *Score Final* possível dentro do pedido e exibe um diagnóstico detalhando quais regras ($HC_1 \dots HC_5$) precisaram ser adaptadas.
+* **Grafo Relacional Interativo (Área Central):**
+  * Exibe os integrantes do squad como nós conectados por arestas dinâmicas:
+    * **Linhas Verdes (Afinidade):** Indicam sinergia e histórico positivo de colaboração.
+    * **Linhas Vermelhas (Atrito):** Alertam sobre conflitos interpessoais ou incompatibilidade operacional.
+  * **Design Emocional:** Conta com um personagem animado em estética *slim line-art* na base da interface para humanizar a leitura dos dados e reduzir a fadiga cognitiva.
+* **Simulador "What-If" via Drag-and-Drop:**
+  * Permite arrastar profissionais do **Banco de Talentos** lateral e soltá-los diretamente sobre membros do grafo central.
+  * Recalcula instantaneamente custos, conexões e métricas sem zerar os indicadores, exibindo um alerta visual discreto caso a troca manual viole alguma regra de orçamento, tamanho ou skill obrigatória.
+* **Painel de Métricas Explicáveis (*Resultados da Combinação*):**
+  * Apresenta o **Score Total (`0` a `100`)**, o **Custo Total por Hora** comparado ao teto definido e **5 sub-índices de desempenho**:
+    1. **Competência Técnica:** Cobertura e profundidade das skills exigidas.
+    2. **Domínio do Setor:** Experiência prévia dos membros no segmento da missão.
+    3. **Química da Equipe:** Saldo líquido entre afinidades e atritos interpessoais.
+    4. **Equilíbrio de Perfis:** Diversidade complementar de arquétipos dentro do squad.
+    5. **Eficiência de Custo & Entrega:** Relação entre valor/hora, teto orçamentário e confiabilidade de prazo.
+
+---
+
+## Como Usar (Passo a Passo)
+
+1. **Defina a Missão:** No painel esquerdo, selecione o **Setor**, o **Tipo de Solução**, adicione as **Skills Obrigatórias** com seus níveis mínimos e ajuste o **Orçamento Máximo (`R$/h`)** e o **Tamanho da Equipe**.
+2. **Gere as Recomendações:** Acione a busca para visualizar o squad `1º Campeão` no grafo central e suas métricas detalhadas no card de resultados.
+3. **Compare o Pódio:** Navegue entre as posições `1º` ao `5º` na barra superior para comparar custo/hora, equilíbrio de perfis e *Score Total* entre as melhores alternativas.
+4. **Simule Trocas (*What-If*):** Arraste qualquer profissional da lista lateral e solte sobre um integrante do grafo para testar substituições em tempo real e observar o impacto nas linhas de afinidade/atrito e nas 5 barras de métricas.
+5. **Audite os Alertas:** Caso apareça um aviso de regra descumprida no painel de resultados (ex.: orçamento excedido ou skill abaixo do nível exigido), ajuste a composição no grafo ou revise os parâmetros até atingir uma formação 100% válida.
+
+---
+
 ## Arquitetura do Sistema
 
 ```text
