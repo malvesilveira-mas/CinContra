@@ -149,3 +149,4 @@ npm --prefix cincontra_front run build
 - **Google Colab:** Execução e medição de performance do protótipo do motor em Python com os 60 profissionais (`squad_rpg_60.csv`).
 - **Google Antigravity:** Desenvolvimento agêntico do `/backend` em FastAPI, integração com `cincontra_front`, execução de testes e configuração do ambiente Docker com modelos como Gemini 4 Argon e Opus 5.5.
 - **Pesquisa Google / Google Workspace / Gemini Notebook:** Apoio à pesquisa, documentação e organização do fluxo de trabalho do projeto.
+- **Gemini:** Planejamento geral do projeto
